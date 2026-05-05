@@ -1,12 +1,14 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}종합설계 프로젝트{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+  <link rel="stylesheet" href="{% static 'css/main.css' %}?v=1.5">
 </head>
+
 <body>
   <div class="app-wrapper">
 
@@ -14,7 +16,9 @@
     <div class="top-header">
       <div class="top-header-left">
         <div class="project-menu" id="projectMenuBtn">
-          <span class="project-menu-label">{% if current_project %}{{ current_project.name }}{% else %}프로젝트 없음{% endif %}</span>
+          <span class="project-menu-label">
+            {% if current_project %}{{ current_project.name }}{% else %}프로젝트 없음{% endif %}
+          </span>
           <span class="dropdown-arrow">&#8964;</span>
         </div>
         <div class="project-dropdown-menu hidden" id="projectDropdown">
@@ -22,13 +26,13 @@
           <!-- 속한 팀 목록 -->
           <div class="dropdown-section-label">내 프로젝트</div>
           {% if user_projects %}
-            {% for proj in user_projects %}
-            <a href="{% url 'review' %}" class="dropdown-item dropdown-team-item">
-              <span class="team-dot"></span>{{ proj.name }}
-            </a>
-            {% endfor %}
+          {% for proj in user_projects %}
+          <a href="{% url 'review' %}" class="dropdown-item dropdown-team-item">
+            <span class="team-dot"></span>{{ proj.name }}
+          </a>
+          {% endfor %}
           {% else %}
-            <div class="dropdown-empty">속한 프로젝트가 없습니다</div>
+          <div class="dropdown-empty">속한 프로젝트가 없습니다</div>
           {% endif %}
 
           <div class="dropdown-divider"></div>
@@ -46,8 +50,8 @@
             <form method="post" action="{% url 'project_list' %}">
               {% csrf_token %}
               <input type="hidden" name="action" value="join_project">
-              <input type="text" name="join_code" class="form-input dropdown-input"
-                     placeholder="6자리 코드" maxlength="6" pattern="[0-9]{6}" required>
+              <input type="text" name="join_code" class="form-input dropdown-input" placeholder="6자리 코드" maxlength="6"
+                pattern="[0-9]{6}" required>
               <button type="submit" class="btn-primary btn-dropdown">입장</button>
             </form>
           </div>
@@ -56,8 +60,8 @@
       </div>
       <div class="top-header-right">
         <div class="user-menu" id="userMenuBtn">
-          <span class="user-icon">&#9711;</span>
-          <span class="user-menu-label">{{ request.user.username }}</span>
+          <span class="user-icon">{% if request.user.is_authenticated %}{{ request.user.username|slice:":1"|upper }}{% else %}U{% endif %}</span>
+          <span class="user-menu-label">{{ request.user.username|default:"Guest" }}</span>
           <span class="dropdown-arrow">&#8964;</span>
         </div>
         <div class="user-dropdown-menu hidden" id="userDropdown">
@@ -76,7 +80,8 @@
         <div class="nav-tabs">
           <a href="{% url 'review' %}" class="nav-tab {% if tab == 'review' %}active{% endif %}">자료 검증</a>
           <a href="{% url 'archive' %}" class="nav-tab {% if tab == 'archive' %}active{% endif %}">자료 보관함</a>
-          <a href="{% url 'project_settings_topic' %}" class="nav-tab {% if tab == 'settings' %}active{% endif %}">프로젝트 관리</a>
+          <a href="{% url 'project_settings_topic' %}" class="nav-tab {% if tab == 'settings' %}active{% endif %}">프로젝트
+            관리</a>
           <a href="{% url 'export' %}" class="nav-tab {% if tab == 'export' %}active{% endif %}">내보내기</a>
         </div>
       </div>
@@ -101,17 +106,17 @@
       panel.classList.toggle('hidden');
     }
 
-    document.getElementById('projectMenuBtn').addEventListener('click', function(e) {
+    document.getElementById('projectMenuBtn').addEventListener('click', function (e) {
       e.stopPropagation();
       document.getElementById('projectDropdown').classList.toggle('hidden');
       document.getElementById('userDropdown').classList.add('hidden');
     });
-    document.getElementById('userMenuBtn').addEventListener('click', function(e) {
+    document.getElementById('userMenuBtn').addEventListener('click', function (e) {
       e.stopPropagation();
       document.getElementById('userDropdown').classList.toggle('hidden');
       document.getElementById('projectDropdown').classList.add('hidden');
     });
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
       if (!e.target.closest('#projectDropdown') && !e.target.closest('#projectMenuBtn')) {
         document.getElementById('projectDropdown').classList.add('hidden');
       }
@@ -121,4 +126,5 @@
     });
   </script>
 </body>
+
 </html>

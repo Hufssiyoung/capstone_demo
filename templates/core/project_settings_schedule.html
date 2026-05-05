@@ -39,7 +39,8 @@
       {% for week in weeks %}
       <div class="cal-grid cal-week">
         {% for day in week %}
-        <div class="cal-day {% if day.day == 0 %}empty{% endif %} {% if day.is_today %}today{% endif %} {% if day.events %}has-event{% endif %}">
+        <div class="cal-day {% if day.day == 0 %}empty{% endif %} {% if day.is_today %}today{% endif %} {% if day.events %}has-event{% endif %}"
+             {% if day.day != 0 %}data-date="{{ year }}-{{ month|stringformat:'02d' }}-{{ day.day|stringformat:'02d' }}"{% endif %}>
           {% if day.day != 0 %}
           <span class="cal-day-num {% if day.is_sunday %}sunday{% endif %} {% if day.is_saturday %}saturday{% endif %}">{{ day.day }}</span>
           {% for event in day.events %}
@@ -93,4 +94,76 @@
     </div>
   </div>
 </div>
+
+<!-- 일정 추가 모달 -->
+<div class="modal-overlay" id="eventModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <span id="modalDateLabel">새 일정 추가</span>
+      <button class="modal-close" id="closeModalBtn">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="text" id="modalEventTitle" class="form-input" placeholder="일정 제목을 입력하세요" autocomplete="off">
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="cancelModalBtn">취소</button>
+      <button class="btn-primary" id="confirmModalBtn">추가</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const eventModal = document.getElementById('eventModal');
+  const modalDateLabel = document.getElementById('modalDateLabel');
+  const modalEventTitle = document.getElementById('modalEventTitle');
+  const closeModalBtn = document.getElementById('closeModalBtn');
+  const cancelModalBtn = document.getElementById('cancelModalBtn');
+  const confirmModalBtn = document.getElementById('confirmModalBtn');
+  let currentDateStr = '';
+
+  function openModal(dateStr) {
+    currentDateStr = dateStr;
+    modalDateLabel.textContent = dateStr + " 일정 추가";
+    modalEventTitle.value = "";
+    eventModal.classList.add('show');
+    // 모달이 나타나는 트랜지션 후에 포커스 주기
+    setTimeout(() => modalEventTitle.focus(), 100);
+  }
+
+  function closeModal() {
+    eventModal.classList.remove('show');
+  }
+
+  function submitModalEvent() {
+    const title = modalEventTitle.value;
+    if (title && title.trim() !== "") {
+      const form = document.querySelector('.event-add-form');
+      form.querySelector('input[name="date"]').value = currentDateStr;
+      form.querySelector('input[name="title"]').value = title.trim();
+      form.submit();
+    }
+  }
+
+  closeModalBtn.addEventListener('click', closeModal);
+  cancelModalBtn.addEventListener('click', closeModal);
+  confirmModalBtn.addEventListener('click', submitModalEvent);
+
+  // 엔터 키 입력 시 바로 추가, ESC 키 입력 시 닫기
+  modalEventTitle.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitModalEvent();
+    } else if (e.key === 'Escape') {
+      closeModal();
+    }
+  });
+
+  document.querySelectorAll('.cal-day[data-date]').forEach(function(dayCell) {
+    dayCell.addEventListener('dblclick', function(e) {
+      if (e.target.closest('.event-item-form')) return;
+      const dateStr = this.getAttribute('data-date');
+      openModal(dateStr);
+    });
+  });
+</script>
 {% endblock %}
