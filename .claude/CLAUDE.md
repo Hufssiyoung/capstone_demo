@@ -17,6 +17,7 @@ python manage.py runserver              # 개발 서버 → http://127.0.0.1:800
 ```
 
 환경변수 (`.env`):
+
 - `SECRET_KEY` — Django 시크릿 키
 - `DEBUG` — True/False
 
@@ -42,10 +43,10 @@ python manage.py runserver              # 개발 서버 → http://127.0.0.1:800
 
 ## 리다이렉트 규칙
 
-- `/` → 로그인 O: `/teams/` / 로그인 X: `/accounts/login/`
-- `/accounts/login/` → 이미 로그인 O: `/teams/` (redirect_authenticated_user=True)
-- 로그인 완료 후 → `/teams/`
-- 회원가입 완료 후 → `/teams/`
+- `/` → 로그인 O: `/projects/` / 로그인 X: `/accounts/login/`
+- `/accounts/login/` → 이미 로그인 O: `/projects/` (redirect_authenticated_user=True)
+- 로그인 완료 후 → `/projects/`
+- 회원가입 완료 후 → `/projects/`
 
 ---
 
@@ -65,21 +66,21 @@ python manage.py runserver              # 개발 서버 → http://127.0.0.1:800
 
 ## 탭 구조
 
-| 순서 | 탭 | URL | 상태 |
-|---|---|---|---|
-| 0 | 프로젝트 목록 | `/teams/` | 구현됨 (메인 탭 외부) |
-| 1 | 자료 검증 | `/review/` | 구현됨 |
-| 2 | 자료 보관함 | `/archive/` | 구현됨 |
-| 3 | 팀 관리 | `/settings/topic/` | 구현됨 |
-| 4 | 내보내기 | `/export/` | UI만 |
+| 순서 | 탭            | URL                | 상태                  |
+| ---- | ------------- | ------------------ | --------------------- |
+| 0    | 프로젝트 목록 | `/projects/`       | 구현됨 (메인 탭 외부) |
+| 1    | 자료 검증     | `/review/`         | 구현됨                |
+| 2    | 자료 보관함   | `/archive/`        | 구현됨                |
+| 3    | 팀 관리       | `/settings/topic/` | 구현됨                |
+| 4    | 내보내기      | `/export/`         | UI만                  |
 
 ### 팀 관리 서브탭
 
-| 서브탭 | URL | 기능 |
-|---|---|---|
-| 프로젝트 개요 | `/settings/topic/` | 프로젝트 이름·주제·상세설명 인라인 수정, 참고자료(PDF) 업로드/삭제 |
-| 역할 분담 | `/settings/role/` | 팀원 역할 변경 |
-| 일정 관리 | `/settings/schedule/` | 월별 달력, 일정 추가/삭제 |
+| 서브탭        | URL                   | 기능                                                               |
+| ------------- | --------------------- | ------------------------------------------------------------------ |
+| 프로젝트 개요 | `/settings/topic/`    | 프로젝트 이름·주제·상세설명 인라인 수정, 참고자료(PDF) 업로드/삭제 |
+| 역할 분담     | `/settings/role/`     | 팀원 역할 변경                                                     |
+| 일정 관리     | `/settings/schedule/` | 월별 달력, 일정 추가/삭제                                          |
 
 ---
 
@@ -88,21 +89,25 @@ python manage.py runserver              # 개발 서버 → http://127.0.0.1:800
 3패널 레이아웃 (`1.5fr 3fr 1.5fr`):
 
 **왼쪽 사이드바**
+
 - 자료 제출하기 버튼 → 중앙 편집창 이동
 - 제출 폼: 제목 + 줄 글 + PDF 첨부 (선택)
 - 현재 자료 목록: 전체 상태(리뷰중/검증완료/거절됨) 표시
 
 **가운데 뷰어**
+
 - 자료 미선택: 줄 글 입력 에디터
 - 자료 선택: 제목·메타·본문 표시, AI/팀원 하이라이트 표시
 - 상단: 상태 뱃지 + 자료명 + "리뷰 남기기" 버튼
 
 **오른쪽 패널 (3탭)**
+
 - `AI 리뷰`: AI가 분석한 리뷰 카드 (해당내용·문제점·제안), 클릭 시 텍스트 하이라이트 연동
 - `팀원 리뷰`: 본인 제외 팀원 리뷰, 리뷰어별 토글 아코디언
 - `리뷰 남기기`: 드래그→자동 채움, 내 리뷰 목록, 승인/보류/거절 투표
 
 하이라이트 규칙:
+
 - AI 리뷰 탭: AI 하이라이트(노랑)만 표시
 - 팀원 리뷰 탭: 리뷰어 토글 열 때 해당 팀원 하이라이트(파랑)만 표시
 - 다른 탭: 하이라이트 없음
@@ -112,6 +117,7 @@ python manage.py runserver              # 개발 서버 → http://127.0.0.1:800
 ## 자료 보관함 (`/archive/`)
 
 세 섹션으로 구분:
+
 - **리뷰 중** (노란 뱃지): 검증/거절 버튼 + 삭제
 - **검증 완료** (초록 뱃지): 다운로드(PDF) + 삭제
 - **거절됨** (빨간 뱃지): 삭제
@@ -131,7 +137,8 @@ python manage.py runserver              # 개발 서버 → http://127.0.0.1:800
 │   ├── views.py
 │   ├── urls.py
 │   ├── forms.py
-│   └── admin.py
+│   ├── admin.py
+│   └── management/commands/seed.py
 ├── templates/
 │   ├── base.html
 │   ├── registration/
@@ -160,38 +167,44 @@ python manage.py runserver              # 개발 서버 → http://127.0.0.1:800
 
 ## 모델
 
-| 모델 | 주요 필드 |
-|---|---|
-| `Project` | name, join_code(6자리), members(M2M→User), title, description |
-| `ProjectFile` | project(FK), file, content, topic, status(pending/verified/rejected), uploaded_by |
-| `ProjectReference` | project(FK), file(PDF), original_name — 팀 관리 참고자료 전용 |
-| `FileReviewItem` | project_file(FK), highlighted_text, problem, suggestion, order — AI 리뷰 |
-| `TeamReviewItem` | project_file(FK), reviewer(FK), highlighted_text, problem, suggestion — 팀원 드래그 리뷰 |
-| `TeamReview` | project_file(FK), reviewer(FK), vote(approve/reject/hold) — 최종 투표 |
-| `TeamMember` | project(FK), user(FK), name, role, order — related_name: members_info |
-| `ScheduleEvent` | project(FK), title, date |
+| 모델               | 주요 필드                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `Project`          | name, join_code(6자리), members(M2M→User), title, description, created_at, updated_at                                    |
+| `ProjectFile`      | project(FK), file, original_name, file_size, content, topic, status(pending/verified/rejected), uploaded_by, uploaded_at |
+| `ProjectReference` | project(FK), file(PDF), original_name, file_size, uploaded_by, uploaded_at — 팀 관리 참고자료 전용                       |
+| `FileReviewItem`   | project_file(FK), highlighted_text, problem, suggestion, order — AI 리뷰                                                 |
+| `TeamReviewItem`   | project_file(FK), reviewer(FK), highlighted_text, problem, suggestion, created_at — 팀원 드래그 리뷰                     |
+| `TeamReview`       | project_file(FK), reviewer(FK), vote(approve/reject/hold), comment, created_at, updated_at — unique_together 제약        |
+| `TeamMember`       | project(FK), user(FK), name, role, order — related_name: members_info                                                    |
+| `ScheduleEvent`    | project(FK), title, date                                                                                                 |
 
-> `Project.members` (M2M) ↔ User.projects (related_name)  
+> `Project.members` (M2M) ↔ User.projects (related_name)
 > `TeamMember` (역할 정보) ↔ project.members_info (related_name)
+
+모델 메서드:
+
+- `ProjectFile.ext()` — 파일 확장자 반환
+- `ProjectFile.size_display()` / `ProjectReference.size_display()` — 파일 크기 포맷 (KB/MB)
+- `TeamMember.avatar_char()` — 아바타용 이름 첫 글자 반환
 
 ---
 
 ## 주요 URL
 
-| name | URL | 설명 |
-|---|---|---|
-| `login` | `/accounts/login/` | 로그인 |
-| `logout` | `/accounts/logout/` | 로그아웃 (POST) |
-| `signup` | `/accounts/signup/` | 회원가입 |
-| `project_list` | `/teams/` | 프로젝트 목록·생성·삭제·입장 |
-| `review` | `/review/` | 자료 검증 |
-| `archive` | `/archive/` | 자료 보관함 |
-| `export` | `/export/` | 내보내기 |
-| `project_settings_topic` | `/settings/topic/` | 프로젝트 개요 설정 |
-| `project_settings_role` | `/settings/role/` | 역할 분담 |
-| `project_settings_schedule` | `/settings/schedule/` | 스케줄 |
-| `delete_file` | `/settings/file/<id>/delete/` | 참고자료 삭제 |
-| `delete_member` | `/settings/member/<id>/delete/` | 팀원 삭제 |
+| name                        | URL                             | 설명                         |
+| --------------------------- | ------------------------------- | ---------------------------- |
+| `login`                     | `/accounts/login/`              | 로그인                       |
+| `logout`                    | `/accounts/logout/`             | 로그아웃 (POST)              |
+| `signup`                    | `/accounts/signup/`             | 회원가입                     |
+| `project_list`              | `/projects/`                    | 프로젝트 목록·생성·삭제·입장 |
+| `review`                    | `/review/`                      | 자료 검증                    |
+| `archive`                   | `/archive/`                     | 자료 보관함                  |
+| `export`                    | `/export/`                      | 내보내기                     |
+| `project_settings_topic`    | `/settings/topic/`              | 프로젝트 개요 설정           |
+| `project_settings_role`     | `/settings/role/`               | 역할 분담                    |
+| `project_settings_schedule` | `/settings/schedule/`           | 스케줄                       |
+| `delete_file`               | `/settings/file/<id>/delete/`   | 참고자료 삭제                |
+| `delete_member`             | `/settings/member/<id>/delete/` | 팀원 삭제                    |
 
 ---
 
@@ -208,8 +221,42 @@ python manage.py runserver              # 개발 서버 → http://127.0.0.1:800
 
 ---
 
+## 구현 현황 (2026-05-06 기준)
+
+| 항목        | 상태         | 비고                              |
+| ----------- | ------------ | --------------------------------- |
+| 모델        | ✅ 완전 구현 | 8개 모델 전체                     |
+| 뷰/URL      | ✅ 완전 구현 | 10개 뷰 전체                      |
+| 템플릿      | ✅ 완전 구현 | 11개 파일                         |
+| CSS         | ✅ 완전 구현 | main.css (~2968줄)                |
+| JS          | ⚠️ 부분      | main.js 12줄 + 템플릿 인라인 위주 |
+| 인증        | ✅ 완전 구현 | signup/login/logout               |
+| 자료 검증   | ✅ 완전 구현 | 3패널, 드래그 리뷰, 투표          |
+| 자료 보관함 | ✅ 완전 구현 | 상태별 3섹션                      |
+| 팀 관리     | ✅ 완전 구현 | 프로젝트 개요, 역할, 일정         |
+| AI 연동     | ❌ 미구현    | `FileReviewItem` 수동 입력만 가능 |
+| 내보내기    | ⚠️ UI만      | export.html 뼈대만 존재           |
+
+---
+
 ## 미구현 (추후 작업)
 
-- [ ] AI 워크플로우 연동 (`FileReviewItem` 자동 생성)
-- [ ] 3일 자동 삭제 (pending 자료 타임아웃)
-- [ ] 투표 집계 → 자동 상태 변경 (다수결 처리)
+### 핵심 기능
+
+- [ ] **AI 연동** — 자료 제출 시 LLM 호출 → `FileReviewItem` 자동 생성 (API 키 관리, 프롬프트 설계, 비동기 처리)
+- [ ] **투표 집계 자동화** — 승인/거절/보류 다수결 → `status` 자동 변경 (현재는 수동 verify/reject만)
+
+### 보조 기능
+
+- [ ] **프로젝트 전환** — 헤더 드롭다운 프로젝트 전환 미동작 (현재 `user.projects.first()` 고정)
+- [ ] **투표 카운트 로직** — 미응답 제외 승인/거절 집계
+
+### 데모 준비
+
+- [ ] **Seed 데이터** — `management/commands/seed.py` 내용 확인 및 완성
+- [ ] **AI 리뷰 더미 데이터** — AI 연동 전 시연용 `FileReviewItem` 수동 입력
+
+### MVP에 미반영
+
+- [ ] **3일 자동 삭제** — pending 자료 타임아웃 (Django cron 또는 Celery 필요)
+- [ ] **내보내기 기능**
