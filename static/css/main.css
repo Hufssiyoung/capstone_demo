@@ -508,6 +508,53 @@ select {
   flex: 1;
 }
 
+/* 팀장 지정 섹션 */
+.leader-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.leader-avatar {
+  background: #7c3aed;
+}
+
+.leader-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #111827;
+}
+
+.leader-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #7c3aed;
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.leader-form {
+  margin-top: 4px;
+}
+
+.leader-select-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.member-leader-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: #7c3aed;
+  border-radius: 5px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
 .member-name-display {
   flex: 1;
   font-size: 14px;
@@ -1019,6 +1066,18 @@ select {
   gap: 8px;
 }
 
+.active-project {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.project-check {
+  margin-left: auto;
+  font-size: 12px;
+  color: #2563eb;
+}
+
 .team-dot {
   width: 8px;
   height: 8px;
@@ -1434,6 +1493,90 @@ select {
   padding: 14px 20px;
   background: #fff;
   border-bottom: 1px solid #e5e7eb;
+}
+
+.doc-approval-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.resubmit-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #d97706;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 5px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-resubmit {
+  font-size: 12px;
+  font-weight: 600;
+  color: #d97706;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.btn-resubmit:hover {
+  background: #fef3c7;
+}
+
+.resubmit-form-wrap {
+  margin-top: 20px;
+}
+
+.resubmit-form-divider {
+  border-top: 1px dashed #fcd34d;
+  margin-bottom: 16px;
+}
+
+.resubmit-form-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #d97706;
+  margin-bottom: 14px;
+}
+
+.resubmit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resubmit-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.btn-secondary {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #f9fafb;
 }
 
 .verification-badge {

@@ -43,14 +43,16 @@
           <div class="file-info">
             <span class="file-name">{{ f.original_name }}</span>
             <span class="file-meta">
+              {{ f.uploaded_by.username|default:"알 수 없음" }} &middot;
               {{ f.uploaded_at|date:"Y-m-d" }}
-              {% if f.file_size %}
-                · {{ f.size_display }}
-              {% endif %}
+              {% if f.file_size %} · {{ f.size_display }}{% endif %}
             </span>
-            <span class="doc-status-badge status-{{ f.status }}">
-              {% if f.status == 'pending' %}리뷰 중{% elif f.status == 'verified' %}검증 완료{% else %}거절됨{% endif %}
-            </span>
+            <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+              <span class="doc-status-badge status-{{ f.status }}">
+                {% if f.status == 'pending' %}리뷰 중{% elif f.status == 'verified' %}검증 완료{% else %}거절됨{% endif %}
+              </span>
+              {% if f.resubmit_count %}<span class="resubmit-badge">#{{ f.resubmit_count }}</span>{% endif %}
+            </div>
           </div>
         </a>
         {% empty %}
@@ -73,7 +75,31 @@
           거절됨
         {% endif %}
       </span>
+      {% if selected_file.resubmit_count %}
+      <span class="resubmit-badge">재제출 #{{ selected_file.resubmit_count }}</span>
+      {% endif %}
       <span class="doc-viewer-name">{{ selected_file.original_name }}</span>
+      {% if is_leader and selected_file.status == 'pending' %}
+      <div class="doc-approval-actions">
+        <form method="post" onsubmit="return confirm('검증 완료로 처리하시겠습니까?')">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="verify">
+          <input type="hidden" name="file_id" value="{{ selected_file.id }}">
+          <button type="submit" class="btn-vote btn-verify btn-vote-sm">✓ 검증완료</button>
+        </form>
+        <form method="post" onsubmit="return confirm('거절하시겠습니까?')">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="reject">
+          <input type="hidden" name="file_id" value="{{ selected_file.id }}">
+          <button type="submit" class="btn-vote btn-reject btn-vote-sm">✕ 거절</button>
+        </form>
+      </div>
+      {% endif %}
+      {% if selected_file.status == 'rejected' and selected_file.uploaded_by == request.user %}
+      <div class="doc-approval-actions">
+        <button type="button" class="btn-resubmit" onclick="toggleResubmitForm()">✎ 수정하기</button>
+      </div>
+      {% endif %}
     </div>
     <div class="doc-viewer-body">
       <div class="doc-meta-row">
@@ -106,6 +132,42 @@
       {% if not selected_file.content and not selected_file.file %}
       <p style="color:#9ca3af;font-size:13px;">내용이 없습니다.</p>
       {% endif %}
+
+      {% if selected_file.status == 'rejected' and selected_file.uploaded_by == request.user %}
+      <div class="resubmit-form-wrap" id="resubmit-form-wrap" style="display:none;">
+        <div class="resubmit-form-divider"></div>
+        <p class="resubmit-form-title">수정 및 재제출</p>
+        <form method="post" enctype="multipart/form-data" class="resubmit-form">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="resubmit">
+          <input type="hidden" name="file_id" value="{{ selected_file.id }}">
+          <div class="submit-field">
+            <label class="submit-field-label">제목 <span class="required-mark">*</span></label>
+            <input type="text" name="topic" class="form-input" value="{{ selected_file.original_name }}" required>
+          </div>
+          <div class="submit-field">
+            <label class="submit-field-label">내용</label>
+            <textarea name="content" class="resubmit-textarea" placeholder="수정된 내용을 입력하세요">{{ selected_file.content }}</textarea>
+          </div>
+          <div class="submit-field">
+            <label class="submit-field-label">파일 교체 <span class="sub-badge">PDF · 선택</span></label>
+            <label class="upload-box-sm" for="resubmitFileInput">
+              <span>📎</span>
+              <span id="resubmitFileLabel">파일 선택</span>
+            </label>
+            <input type="file" id="resubmitFileInput" name="file" class="hidden" accept=".pdf"
+              onchange="document.getElementById('resubmitFileLabel').textContent = this.files[0]?.name || '파일 선택'">
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button type="submit" class="btn-primary btn-submit-full"
+              onclick="return confirm('재제출하면 기존 리뷰가 모두 초기화됩니다. 계속하시겠습니까?')">
+              재제출
+            </button>
+            <button type="button" class="btn-secondary" onclick="toggleResubmitForm()">취소</button>
+          </div>
+        </form>
+      </div>
+      {% endif %}
     </div>
     {% else %}
     <div class="editor-header">
@@ -124,19 +186,19 @@
     <!-- 탭 버튼 -->
     <div class="result-tabs">
       <button class="result-tab active" id="tab-ai" onclick="switchTab('ai')">AI 리뷰</button>
-      <button class="result-tab" id="tab-write" onclick="switchTab('write')">
-        유저 리뷰
-        {% if my_team_review_items %}
-          <span class="doc-count" style="margin-left:4px;">
-            {{ my_team_review_items|length }}
-          </span>
-        {% endif %}
-      </button>
       <button class="result-tab" id="tab-team" onclick="switchTab('team')">
         팀원 리뷰
         {% if other_review_count %}
           <span class="doc-count" style="margin-left:4px;">
             {{ other_review_count }}
+          </span>
+        {% endif %}
+      </button>
+      <button class="result-tab" id="tab-write" onclick="switchTab('write')">
+        내 리뷰
+        {% if my_team_review_items %}
+          <span class="doc-count" style="margin-left:4px;">
+            {{ my_team_review_items|length }}
           </span>
         {% endif %}
       </button>
@@ -447,9 +509,33 @@
     }
   }
 
+  document.getElementById('submitForm').addEventListener('submit', function (e) {
+    const content = document.querySelector('.center-textarea')?.value.trim() || '';
+    const file = document.getElementById('docFileInput')?.files[0];
+    if (!content && !file) {
+      e.preventDefault();
+      let msg = document.getElementById('submit-empty-msg');
+      if (!msg) {
+        msg = document.createElement('p');
+        msg.id = 'submit-empty-msg';
+        msg.style.cssText = 'color:#ef4444;font-size:12px;margin-top:6px;';
+        document.querySelector('.btn-submit-full').insertAdjacentElement('afterend', msg);
+      }
+      msg.textContent = '자료를 입력해주세요.';
+      document.querySelector('.center-textarea')?.focus();
+    }
+  });
+
   function updateFileLabel(input) {
     document.getElementById('fileLabel').textContent =
       input.files[0] ? input.files[0].name : '파일 선택';
+  }
+
+  function toggleResubmitForm() {
+    const wrap = document.getElementById('resubmit-form-wrap');
+    if (!wrap) return;
+    wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+    if (wrap.style.display === 'block') wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 </script>
 {% endblock %}

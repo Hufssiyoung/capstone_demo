@@ -12,4 +12,5 @@ urlpatterns = [
     path('settings/schedule/', views.project_settings_schedule, name='project_settings_schedule'),
     path('settings/file/<int:file_id>/delete/', views.delete_file, name='delete_file'),
     path('settings/member/<int:member_id>/delete/', views.delete_member, name='delete_member'),
+    path('projects/<int:project_id>/switch/', views.switch_project, name='switch_project'),
 ]

@@ -12,6 +12,29 @@
   </div>
 
   <div class="settings-body">
+
+    <!-- 팀장 지정 카드 -->
+    <div class="card" style="margin-bottom:16px;">
+      <h3 class="card-title" style="margin-bottom:16px;">팀장 지정</h3>
+      <form method="post" class="leader-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_leader">
+        <div class="leader-select-row">
+          <select name="leader_user_id" class="form-select" style="flex:1;">
+            <option value="">-- 팀장 해제 --</option>
+            {% for member in members %}
+            <option value="{{ member.user.id }}"
+              {% if current_leader and current_leader.user.id == member.user.id %}selected{% endif %}>
+              {{ member.user.username }}
+            </option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn-primary" style="white-space:nowrap;">지정하기</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- 역할 분담 카드 -->
     <div class="card">
       <h3 class="card-title" style="margin-bottom:20px;">팀원 역할 분담</h3>
 
@@ -22,6 +45,7 @@
           {% for member in members %}
           <div class="member-row">
             <div class="member-avatar">{{ member.user.username|slice:":1"|upper|default:member.avatar_char }}</div>
+            {% if member.is_leader %}<span class="member-leader-badge">팀장</span>{% endif %}
             <input type="hidden" name="user_id" value="{{ member.user.id }}">
             <span class="member-name-display">{{ member.user.username|default:member.name }}</span>
             <input type="text" name="role" value="{{ member.role }}"

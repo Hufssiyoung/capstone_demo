@@ -40,6 +40,7 @@ class ProjectFile(models.Model):
     content = models.TextField(blank=True, verbose_name='검증 내용 (텍스트)')
     topic = models.TextField(blank=True, verbose_name='문서 토픽')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    resubmit_count = models.PositiveIntegerField(default=0, verbose_name='재제출 횟수')
     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='uploaded_files')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
@@ -156,6 +157,7 @@ class TeamMember(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='team_roles')
     name = models.CharField(max_length=50)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='기타')
+    is_leader = models.BooleanField(default=False, verbose_name='팀장')
     order = models.PositiveIntegerField(default=0)
 
     def __str__(self):

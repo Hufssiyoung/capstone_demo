@@ -27,8 +27,10 @@
           <div class="dropdown-section-label">내 프로젝트</div>
           {% if user_projects %}
           {% for proj in user_projects %}
-          <a href="{% url 'review' %}" class="dropdown-item dropdown-team-item">
+          <a href="{% url 'switch_project' proj.id %}"
+            class="dropdown-item dropdown-team-item {% if current_project.id == proj.id %}active-project{% endif %}">
             <span class="team-dot"></span>{{ proj.name }}
+            {% if current_project.id == proj.id %}<span class="project-check">✓</span>{% endif %}
           </a>
           {% endfor %}
           {% else %}

@@ -12,10 +12,17 @@ from .forms import ProjectTopicForm, ScheduleEventForm
 from .models import FileReviewItem, Project, ProjectFile, ProjectReference, ScheduleEvent, TeamMember, TeamReview, TeamReviewItem
 
 
-def _get_project_for_user(user):
+def _get_project_for_user(request):
+    user = getattr(request, 'user', None)
     if user and user.is_authenticated:
+        active_id = request.session.get('active_project_id')
+        if active_id:
+            project = user.projects.filter(id=active_id).first()
+            if project:
+                return project
         project = user.projects.first()
         if project:
+            request.session['active_project_id'] = project.id
             return project
     try:
         return Project.objects.get(id=1)
@@ -26,7 +33,7 @@ def _get_project_for_user(user):
 
 
 def _base_context(tab='', request=None):
-    project = _get_project_for_user(request.user if request else None)
+    project = _get_project_for_user(request)
     ctx = {'tab': tab, 'current_project': project}
     if request and request.user.is_authenticated:
         ctx['user_projects'] = request.user.projects.all()
@@ -56,7 +63,7 @@ def index(request):
 # ── 자료 검증 탭 ────────────────────────────────────────────────
 @login_required
 def review(request):
-    project = _get_project_for_user(request.user)
+    project = _get_project_for_user(request)
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'submit_text':
@@ -74,6 +81,7 @@ def review(request):
                     content=content,
                     topic=topic,
                     status='pending',
+                    resubmit_count=1,
                     uploaded_by=request.user,
                 )
                 if file_ok:
@@ -86,6 +94,32 @@ def review(request):
         elif action == 'reject':
             file_id = request.POST.get('file_id')
             ProjectFile.objects.filter(id=file_id, project=project).update(status='rejected')
+        elif action == 'resubmit':
+            file_id = request.POST.get('file_id')
+            pf = ProjectFile.objects.filter(
+                id=file_id, project=project, uploaded_by=request.user, status='rejected'
+            ).first()
+            if pf:
+                new_topic = request.POST.get('topic', '').strip()
+                new_content = request.POST.get('content', '').strip()
+                uploaded = request.FILES.get('file')
+                file_ok = uploaded and uploaded.name.lower().endswith('.pdf')
+                if new_topic:
+                    pf.original_name = new_topic
+                    pf.topic = new_topic
+                pf.content = new_content
+                pf.status = 'pending'
+                pf.resubmit_count += 1
+                if file_ok:
+                    pf.file.delete(save=False)
+                    pf.file_size = uploaded.size
+                    pf.file.save(uploaded.name, uploaded)
+                else:
+                    pf.save()
+                pf.review_items.all().delete()
+                pf.team_review_items.all().delete()
+                pf.team_reviews.all().delete()
+            return redirect(f'/review/?doc={file_id}')
         elif action == 'delete_doc':
             file_id = request.POST.get('file_id')
             pf = ProjectFile.objects.filter(id=file_id, project=project).first()
@@ -175,7 +209,7 @@ def review(request):
                 escaped = escaped.replace(hl, mark, 1)
             highlighted_content = escaped.replace('\n', '<br>')
 
-    other_review_count = sum(len(g['items']) for g in reviewer_groups)
+    other_review_count = sum(1 for g in reviewer_groups if g['vote'] or g['items'])
     my_team_review_items = []
     my_review_indices = []
     my_vote = None
@@ -190,6 +224,8 @@ def review(request):
         vote_obj = selected_file.team_reviews.filter(reviewer=request.user).first()
         my_vote = vote_obj.vote if vote_obj else None
 
+    is_leader = project.members_info.filter(user=request.user, is_leader=True).exists()
+
     ctx = _base_context('review', request)
     ctx.update({
         'project': project,
@@ -202,6 +238,7 @@ def review(request):
         'my_review_indices': my_review_indices,
         'my_vote': my_vote,
         'other_review_count': other_review_count,
+        'is_leader': is_leader,
     })
     return render(request, 'core/review.html', ctx)
 
@@ -209,16 +246,12 @@ def review(request):
 # ── 자료 보관함 탭 ───────────────────────────────────────────────
 @login_required
 def archive(request):
-    project = _get_project_for_user(request.user)
+    project = _get_project_for_user(request)
 
     if request.method == 'POST':
         action = request.POST.get('action')
         file_id = request.POST.get('file_id')
-        if action == 'verify':
-            ProjectFile.objects.filter(id=file_id, project=project).update(status='verified')
-        elif action == 'reject':
-            ProjectFile.objects.filter(id=file_id, project=project).update(status='rejected')
-        elif action == 'delete_doc':
+        if action == 'delete_doc':
             pf = ProjectFile.objects.filter(id=file_id, project=project).first()
             if pf:
                 pf.file.delete(save=False)
@@ -256,11 +289,13 @@ def project_list(request):
             if name:
                 project = Project.objects.create(name=name, join_code=Project.generate_code())
                 project.members.add(request.user)
+                request.session['active_project_id'] = project.id
         elif action == 'join_project':
             code = request.POST.get('join_code', '').strip()
             project = Project.objects.filter(join_code=code).first()
             if project:
                 project.members.add(request.user)
+                request.session['active_project_id'] = project.id
             else:
                 ctx = _base_context('projects', request)
                 ctx['all_projects'] = request.user.projects.all()
@@ -269,6 +304,8 @@ def project_list(request):
         elif action == 'delete_project':
             project_id = request.POST.get('project_id')
             Project.objects.filter(id=project_id).delete()
+            if str(request.session.get('active_project_id')) == str(project_id):
+                del request.session['active_project_id']
         return redirect('project_list')
 
     ctx = _base_context('projects', request)
@@ -276,10 +313,19 @@ def project_list(request):
     return render(request, 'core/project_list.html', ctx)
 
 
+# ── 프로젝트 전환 ───────────────────────────────────────────────
+@login_required
+def switch_project(request, project_id):
+    project = get_object_or_404(Project, id=project_id)
+    if project.members.filter(id=request.user.id).exists():
+        request.session['active_project_id'] = project_id
+    return redirect('review')
+
+
 # ── 프로젝트 설정: 주제 설정 ────────────────────────────────────
 @login_required
 def project_settings_topic(request):
-    project = _get_project_for_user(request.user)
+    project = _get_project_for_user(request)
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'save_project_name':
@@ -330,7 +376,7 @@ def delete_file(request, file_id):
 # ── 프로젝트 설정: 역할 분담 ────────────────────────────────────
 @login_required
 def project_settings_role(request):
-    project = _get_project_for_user(request.user)
+    project = _get_project_for_user(request)
 
     for i, user in enumerate(project.members.all()):
         TeamMember.objects.get_or_create(
@@ -345,14 +391,23 @@ def project_settings_role(request):
             roles = request.POST.getlist('role')
             for uid, role in zip(user_ids, roles):
                 TeamMember.objects.filter(project=project, user_id=uid).update(role=role)
+        elif action == 'save_leader':
+            leader_user_id = request.POST.get('leader_user_id')
+            project.members_info.update(is_leader=False)
+            if leader_user_id:
+                project.members_info.filter(user_id=leader_user_id).update(is_leader=True)
         return redirect('project_settings_role')
+
+    members = project.members_info.select_related('user').order_by('order', 'id')
+    current_leader = members.filter(is_leader=True).first()
 
     ctx = _base_context('settings', request)
     ctx.update({
         'sub_tab': 'role',
         'project': project,
-        'members': project.members_info.select_related('user').order_by('order', 'id'),
+        'members': members,
         'role_choices': TeamMember.ROLE_CHOICES,
+        'current_leader': current_leader,
     })
     return render(request, 'core/project_settings_role.html', ctx)
 
@@ -368,7 +423,7 @@ def delete_member(request, member_id):
 # ── 프로젝트 설정: 스케줄 ───────────────────────────────────────
 @login_required
 def project_settings_schedule(request):
-    project = _get_project_for_user(request.user)
+    project = _get_project_for_user(request)
 
     year = int(request.GET.get('year', date.today().year))
     month = int(request.GET.get('month', date.today().month))
