@@ -41,6 +41,8 @@ class ProjectFile(models.Model):
     topic = models.TextField(blank=True, verbose_name='문서 토픽')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     resubmit_count = models.PositiveIntegerField(default=0, verbose_name='재제출 횟수')
+    ai_job_id = models.CharField(max_length=100, blank=True, default='', verbose_name='AI 검증 job ID')
+    ai_final_grade = models.CharField(max_length=20, blank=True, default='', verbose_name='AI 종합 판정')
     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='uploaded_files')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 

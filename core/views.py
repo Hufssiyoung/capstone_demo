@@ -1,15 +1,88 @@
 import calendar
 import html as html_module
+import re
+import threading
+import time
 from datetime import date
 
+import requests as http_client
+
+from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
+from django.db import close_old_connections
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .forms import ProjectTopicForm, ScheduleEventForm
 from .models import FileReviewItem, Project, ProjectFile, ProjectReference, ScheduleEvent, TeamMember, TeamReview, TeamReviewItem
+
+_AI_BASE = getattr(settings, 'AI_SERVICE_URL', 'http://127.0.0.1:8001')
+
+
+def _normalize_content(text: str) -> str:
+    """줄바꿈 정규화: CRLF→LF, 연속 3개 이상 줄바꿈→2개로 축소."""
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def _find_hl(text: str, query: str, min_ratio: float = 0.6) -> str | None:
+    """text 안에서 query 또는 그 최장 prefix를 찾아 반환. 못 찾으면 None."""
+    if query in text:
+        return query
+    min_len = max(12, int(len(query) * min_ratio))
+    for end in range(len(query) - 1, min_len - 1, -1):
+        prefix = query[:end]
+        if prefix in text:
+            return prefix
+    return None
+
+
+def _ai_verify_background(project_file_id: int, text: str, topic: str) -> None:
+    """백그라운드 스레드: AI 검증 요청 후 결과를 FileReviewItem으로 저장."""
+    try:
+        payload = {"project_file_id": project_file_id, "text": text, "topic": topic}
+        resp = http_client.post(f"{_AI_BASE}/verify", json=payload, timeout=15)
+        if resp.status_code != 202:
+            return
+        job_id = resp.json()["job_id"]
+        ProjectFile.objects.filter(id=project_file_id).update(ai_job_id=job_id)
+
+        for _ in range(72):  # 최대 6분 (5초 × 72)
+            time.sleep(5)
+            st = http_client.get(f"{_AI_BASE}/verify/{job_id}/status", timeout=10)
+            if st.status_code != 200:
+                break
+            status = st.json().get("status")
+            if status == "completed":
+                result_resp = http_client.get(f"{_AI_BASE}/verify/{job_id}/result", timeout=15)
+                if result_resp.status_code == 200:
+                    data = result_resp.json()
+                    issues = data.get("final_report", {}).get("issues", [])
+                    final_grade = data.get("final_grade", "")
+                    close_old_connections()
+                    pf = ProjectFile.objects.filter(id=project_file_id).first()
+                    if pf:
+                        pf.review_items.all().delete()
+                        pf.ai_final_grade = final_grade
+                        pf.save(update_fields=['ai_final_grade'])
+                        for i, issue in enumerate(issues):
+                            FileReviewItem.objects.create(
+                                project_file=pf,
+                                highlighted_text=issue.get("highlighted_text", ""),
+                                problem=issue.get("problem", ""),
+                                suggestion=issue.get("suggestion", ""),
+                                order=i,
+                            )
+                break
+            elif status == "failed":
+                break
+    except Exception:
+        pass
+    finally:
+        close_old_connections()
 
 
 def _get_project_for_user(request):
@@ -67,7 +140,7 @@ def review(request):
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'submit_text':
-            content = request.POST.get('content', '').strip()
+            content = _normalize_content(request.POST.get('content', ''))
             topic = request.POST.get('topic', '').strip()
             uploaded = request.FILES.get('file')
             ALLOWED = ('.pdf',)
@@ -88,6 +161,12 @@ def review(request):
                     pf.file.save(uploaded.name, uploaded)
                 else:
                     pf.save()
+                if content:
+                    threading.Thread(
+                        target=_ai_verify_background,
+                        args=(pf.id, content, topic or pf.original_name),
+                        daemon=True,
+                    ).start()
         elif action == 'verify':
             file_id = request.POST.get('file_id')
             ProjectFile.objects.filter(id=file_id, project=project).update(status='verified')
@@ -101,7 +180,7 @@ def review(request):
             ).first()
             if pf:
                 new_topic = request.POST.get('topic', '').strip()
-                new_content = request.POST.get('content', '').strip()
+                new_content = _normalize_content(request.POST.get('content', ''))
                 uploaded = request.FILES.get('file')
                 file_ok = uploaded and uploaded.name.lower().endswith('.pdf')
                 if new_topic:
@@ -119,6 +198,12 @@ def review(request):
                 pf.review_items.all().delete()
                 pf.team_review_items.all().delete()
                 pf.team_reviews.all().delete()
+                if new_content:
+                    threading.Thread(
+                        target=_ai_verify_background,
+                        args=(pf.id, new_content, pf.topic or pf.original_name),
+                        daemon=True,
+                    ).start()
             return redirect(f'/review/?doc={file_id}')
         elif action == 'delete_doc':
             file_id = request.POST.get('file_id')
@@ -198,10 +283,13 @@ def review(request):
         if ai_items or team_review_items:
             escaped = html_module.escape(selected_file.content)
             for i, item in enumerate(ai_items):
-                hl = html_module.escape(item.highlighted_text)
-                mark = (f'<mark class="review-highlight ai-hl" data-idx="{i}" '
-                        f'onclick="focusCard({i})">{hl}</mark>')
-                escaped = escaped.replace(hl, mark, 1)
+                hl_raw = re.sub(r'\s+', ' ', item.highlighted_text).strip()
+                hl = html_module.escape(hl_raw)
+                matched = _find_hl(escaped, hl)
+                if matched:
+                    mark = (f'<mark class="review-highlight ai-hl" data-idx="{i}" '
+                            f'onclick="focusCard({i})">{matched}</mark>')
+                    escaped = escaped.replace(matched, mark, 1)
             for i, item in enumerate(team_review_items):
                 hl = html_module.escape(item.highlighted_text)
                 mark = (f'<mark class="review-highlight team-hl" data-tidx="{i}" '
@@ -210,6 +298,13 @@ def review(request):
             highlighted_content = escaped.replace('\n', '<br>')
 
     other_review_count = sum(1 for g in reviewer_groups if g['vote'] or g['items'])
+
+    team_votes = [g['vote'].vote for g in reviewer_groups if g['vote']]
+    team_vote_counts = {
+        'approve': team_votes.count('approve'),
+        'hold': team_votes.count('hold'),
+        'reject': team_votes.count('reject'),
+    } if team_votes else None
     my_team_review_items = []
     my_review_indices = []
     my_vote = None
@@ -226,6 +321,14 @@ def review(request):
 
     is_leader = project.members_info.filter(user=request.user, is_leader=True).exists()
 
+    ai_status = 'none'
+    if selected_file:
+        has_items = selected_file.review_items.exists()
+        if has_items:
+            ai_status = 'completed'
+        elif selected_file.ai_job_id:
+            ai_status = 'processing'
+
     ctx = _base_context('review', request)
     ctx.update({
         'project': project,
@@ -236,8 +339,10 @@ def review(request):
         'reviewer_groups': reviewer_groups,
         'my_team_review_items': my_team_review_items,
         'my_review_indices': my_review_indices,
+        'ai_status': ai_status,
         'my_vote': my_vote,
         'other_review_count': other_review_count,
+        'team_vote_counts': team_vote_counts,
         'is_leader': is_leader,
     })
     return render(request, 'core/review.html', ctx)

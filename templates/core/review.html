@@ -66,19 +66,21 @@
   <div class="review-main {% if not selected_file %}review-editor{% endif %}">
     {% if selected_file %}
     <div class="doc-viewer-header">
-      <span class="doc-status-badge status-{{ selected_file.status }}">
-        {% if selected_file.status == 'pending' %}
-          리뷰 중
-        {% elif selected_file.status == 'verified' %}
-          검증 완료
-        {% else %}
-          거절됨
+      <div class="doc-viewer-header-left">
+        <span class="doc-status-badge status-{{ selected_file.status }}">
+          {% if selected_file.status == 'pending' %}
+            리뷰 중
+          {% elif selected_file.status == 'verified' %}
+            검증 완료
+          {% else %}
+            거절됨
+          {% endif %}
+        </span>
+        {% if selected_file.resubmit_count %}
+        <span class="resubmit-badge">#{{ selected_file.resubmit_count }}</span>
         {% endif %}
-      </span>
-      {% if selected_file.resubmit_count %}
-      <span class="resubmit-badge">재제출 #{{ selected_file.resubmit_count }}</span>
-      {% endif %}
-      <span class="doc-viewer-name">{{ selected_file.original_name }}</span>
+        <span class="doc-viewer-name">{{ selected_file.original_name }}</span>
+      </div>
       {% if is_leader and selected_file.status == 'pending' %}
       <div class="doc-approval-actions">
         <form method="post" onsubmit="return confirm('검증 완료로 처리하시겠습니까?')">
@@ -206,10 +208,20 @@
 
     <!-- AI 검증 탭 -->
     <div id="panel-ai" class="result-panel">
-      {% with items=selected_file.review_items.all %}
-      {% if items %}
+      {% if ai_status == 'processing' %}
+      <div class="ai-status-box ai-status-processing">
+        <span class="ai-status-spinner"></span>
+        <span>AI 검증 진행 중...</span>
+      </div>
+      {% elif ai_status == 'completed' %}
+      {% if selected_file.ai_final_grade %}
+      <div class="ai-final-grade {% if selected_file.ai_final_grade == '통과' %}grade-pass{% elif selected_file.ai_final_grade == '주의' %}grade-warn{% else %}grade-fail{% endif %}">
+        종합 판정 :
+        <span class="ai-grade-label">{{ selected_file.ai_final_grade }}</span>
+      </div>
+      {% endif %}
       <div class="ai-reviews">
-        {% for item in items %}
+        {% for item in selected_file.review_items.all %}
         <div class="ai-review-card" id="review-card-{{ forloop.counter0 }}"
           onclick="focusHighlight({{ forloop.counter0 }})">
           <div class="ai-review-number"># {{ forloop.counter }}</div>
@@ -220,7 +232,7 @@
             </div>
             <div class="ai-review-section">
               <span class="ai-review-label label-problem">문제점</span>
-              <p class="ai-review-text">{{ item.problem }}</p>
+              <p class="ai-review-text">{{ item.problem|linebreaksbr }}</p>
             </div>
             <div class="ai-review-section">
               <span class="ai-review-label label-suggest">제안</span>
@@ -233,11 +245,17 @@
       {% else %}
       <p class="doc-empty" style="margin-top:16px;">AI 리뷰 없음</p>
       {% endif %}
-      {% endwith %}
     </div>
 
     <!-- 팀원 리뷰 탭 -->
     <div id="panel-team" class="result-panel" style="display:none;">
+      {% if team_vote_counts %}
+      <div class="ai-final-grade">
+        <span class="team-vote-tally approve">✓ 승인 {{ team_vote_counts.approve }}</span>
+        <span class="team-vote-tally hold">— 보류 {{ team_vote_counts.hold }}</span>
+        <span class="team-vote-tally reject">✕ 거절 {{ team_vote_counts.reject }}</span>
+      </div>
+      {% endif %}
       {% if reviewer_groups %}
       <div class="team-review-list">
         {% for group in reviewer_groups %}
@@ -499,6 +517,9 @@
   // 페이지 로드 시 AI 탭 기본 활성화
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.ai-hl').forEach(h => h.classList.add('hl-visible'));
+    {% if ai_status == 'processing' %}
+    setTimeout(function () { location.reload(); }, 10000);
+    {% endif %}
   });
 
   function goToWriteMode() {
