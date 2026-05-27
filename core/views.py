@@ -28,16 +28,41 @@ def _normalize_content(text: str) -> str:
     return text.strip()
 
 
-def _find_hl(text: str, query: str, min_ratio: float = 0.6) -> str | None:
-    """text 안에서 query 또는 그 최장 prefix를 찾아 반환. 못 찾으면 None."""
+def _find_hl(text: str, query: str) -> str | None:
+    """text 안에서 query와 가장 유사한 span을 반환. 못 찾으면 None.
+
+    1단계: exact match (빠른 경로)
+    2단계: BM25 슬라이딩 윈도우 — 토큰이 부분적으로 다르거나 어미가 달라도 최적 span 탐색.
+    """
+    from rank_bm25 import BM25Okapi
+
     if query in text:
         return query
-    min_len = max(12, int(len(query) * min_ratio))
-    for end in range(len(query) - 1, min_len - 1, -1):
-        prefix = query[:end]
-        if prefix in text:
-            return prefix
-    return None
+
+    query_tokens = re.findall(r'\w+', query)
+    if not query_tokens:
+        return None
+
+    doc_words = list(re.finditer(r'\w+', text))
+    if not doc_words:
+        return None
+
+    window_size = len(query_tokens) + 3
+    windows = [doc_words[i:i + window_size] for i in range(len(doc_words))]
+    windows = [w for w in windows if w]
+    if not windows:
+        return None
+
+    corpus = [[m.group() for m in w] for w in windows]
+    bm25 = BM25Okapi(corpus)
+    scores = bm25.get_scores(query_tokens)
+
+    best_idx = int(scores.argmax())
+    if scores[best_idx] <= 0:
+        return None
+
+    best_window = windows[best_idx]
+    return text[best_window[0].start():best_window[-1].end()]
 
 
 def _ai_verify_background(project_file_id: int, text: str, topic: str) -> None:
@@ -60,20 +85,24 @@ def _ai_verify_background(project_file_id: int, text: str, topic: str) -> None:
                 result_resp = http_client.get(f"{_AI_BASE}/verify/{job_id}/result", timeout=15)
                 if result_resp.status_code == 200:
                     data = result_resp.json()
-                    issues = data.get("final_report", {}).get("issues", [])
                     final_grade = data.get("final_grade", "")
+                    summary = data.get("final_report", {}).get("summary", "")
+                    issues = data.get("final_report", {}).get("issues", [])
                     close_old_connections()
                     pf = ProjectFile.objects.filter(id=project_file_id).first()
                     if pf:
                         pf.review_items.all().delete()
                         pf.ai_final_grade = final_grade
-                        pf.save(update_fields=['ai_final_grade'])
+                        pf.ai_summary = summary
+                        pf.save(update_fields=['ai_final_grade', 'ai_summary'])
                         for i, issue in enumerate(issues):
                             FileReviewItem.objects.create(
                                 project_file=pf,
                                 highlighted_text=issue.get("highlighted_text", ""),
                                 problem=issue.get("problem", ""),
                                 suggestion=issue.get("suggestion", ""),
+                                judgment=issue.get("judgment", "FAIL"),
+                                node=issue.get("node", ""),
                                 order=i,
                             )
                 break
