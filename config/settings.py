@@ -120,27 +120,26 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
 if os.environ.get("AZURE_ACCOUNT_NAME"):
-    STORAGES = {
-        "default": {
-            "BACKEND": "storages.backends.azure_storage.AzureStorage",
-            "OPTIONS": {
-                "account_name": os.environ["AZURE_ACCOUNT_NAME"],
-                "account_key": os.environ["AZURE_ACCOUNT_KEY"],
-                "azure_container": os.environ.get("AZURE_CONTAINER", "media"),
-                "expiration_secs": 3600,
-            },
-        },
-        "staticfiles": {
-            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    _default_storage = {
+        "BACKEND": "storages.backends.azure_storage.AzureStorage",
+        "OPTIONS": {
+            "account_name": os.environ["AZURE_ACCOUNT_NAME"],
+            "account_key": os.environ["AZURE_ACCOUNT_KEY"],
+            "azure_container": os.environ.get("AZURE_CONTAINER", "media"),
+            "expiration_secs": 3600,
         },
     }
 else:
-    STORAGES = {
-        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
-    }
+    _default_storage = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
     MEDIA_URL = "/media/"
     MEDIA_ROOT = BASE_DIR / "media"
+
+STORAGES = {
+    "default": _default_storage,
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/projects/"
