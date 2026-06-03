@@ -215,11 +215,11 @@
       </div>
       {% elif ai_status == 'completed' %}
       {% if selected_file.ai_final_grade %}
-      <div class="ai-final-grade {% if selected_file.ai_final_grade == '통과' %}grade-pass{% elif selected_file.ai_final_grade == '주의' %}grade-warn{% else %}grade-fail{% endif %}">
+      <div class="ai-final-grade {% if selected_file.ai_final_grade == 'Supported' %}grade-pass{% elif selected_file.ai_final_grade == 'Refuted' %}grade-fail{% else %}grade-warn{% endif %}">
         <div class="ai-grade-row">
           <div class="ai-grade-left">
             <span class="ai-grade-meta">종합 판정</span>
-            <span class="ai-grade-badge">{{ selected_file.ai_final_grade }}</span>
+            <span class="ai-grade-badge">{% if selected_file.ai_final_grade == 'Supported' %}검증 통과{% elif selected_file.ai_final_grade == 'Refuted' %}반박됨{% elif selected_file.ai_final_grade == 'Not Enough Evidence' %}증거 부족{% elif selected_file.ai_final_grade == 'Conflicting Evidence/Cherrypicking' %}상충하는 증거{% else %}{{ selected_file.ai_final_grade }}{% endif %}</span>
           </div>
           {% if selected_file.ai_summary %}
           <button class="ai-grade-toggle" onclick="toggleAiSummary(this)" aria-label="요약 펼치기">
@@ -234,17 +234,13 @@
       {% endif %}
       <div class="ai-reviews">
         {% for item in selected_file.review_items.all %}
-        <div class="ai-review-card {% if item.judgment == 'WARNING' %}card-warning{% else %}card-fail{% endif %}" id="review-card-{{ forloop.counter0 }}"
+        <div class="ai-review-card {% if item.judgment == 'Supported' %}card-pass{% elif item.judgment == 'Refuted' %}card-fail{% else %}card-warning{% endif %}" id="review-card-{{ forloop.counter0 }}"
           onclick="focusHighlight({{ forloop.counter0 }})">
           <div class="ai-review-header">
             <span class="ai-review-number"># {{ forloop.counter }}</span>
             <div class="ai-review-badges">
               {% if item.node %}<span class="ai-review-node-badge">{{ item.node }}</span>{% endif %}
-              {% if item.judgment == 'WARNING' %}
-              <span class="ai-review-judgment-badge badge-warning">WARNING</span>
-              {% else %}
-              <span class="ai-review-judgment-badge badge-fail">FAIL</span>
-              {% endif %}
+              <span class="ai-review-judgment-badge {% if item.judgment == 'Supported' %}badge-pass{% elif item.judgment == 'Refuted' %}badge-fail{% else %}badge-warning{% endif %}">{% if item.judgment == 'Supported' %}검증 통과{% elif item.judgment == 'Refuted' %}반박됨{% elif item.judgment == 'Not Enough Evidence' %}증거 부족{% elif item.judgment == 'Conflicting Evidence/Cherrypicking' %}상충하는 증거{% else %}{{ item.judgment }}{% endif %}</span>
             </div>
           </div>
           <div class="ai-review-body">
@@ -253,12 +249,8 @@
               <p class="ai-review-quote">{{ item.highlighted_text }}</p>
             </div>
             <div class="ai-review-section">
-              <span class="ai-review-label label-problem">문제점</span>
+              <span class="ai-review-label label-problem">근거</span>
               <p class="ai-review-text">{{ item.problem|linebreaksbr }}</p>
-            </div>
-            <div class="ai-review-section">
-              <span class="ai-review-label label-suggest">제안</span>
-              <p class="ai-review-text">{{ item.suggestion }}</p>
             </div>
           </div>
         </div>

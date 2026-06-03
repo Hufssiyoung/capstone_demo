@@ -85,24 +85,29 @@ def _ai_verify_background(project_file_id: int, text: str, topic: str) -> None:
                 result_resp = http_client.get(f"{_AI_BASE}/verify/{job_id}/result", timeout=15)
                 if result_resp.status_code == 200:
                     data = result_resp.json()
-                    final_grade = data.get("final_grade", "")
-                    summary = data.get("final_report", {}).get("summary", "")
-                    issues = data.get("final_report", {}).get("issues", [])
+                    claims = data.get("claims", [])
+                    claim_labels_map = {
+                        cl["claim_id"]: cl
+                        for cl in data.get("claim_labels", [])
+                    }
                     close_old_connections()
                     pf = ProjectFile.objects.filter(id=project_file_id).first()
                     if pf:
                         pf.review_items.all().delete()
-                        pf.ai_final_grade = final_grade
-                        pf.ai_summary = summary
+                        pf.ai_final_grade = ""
+                        pf.ai_summary = ""
                         pf.save(update_fields=['ai_final_grade', 'ai_summary'])
-                        for i, issue in enumerate(issues):
+                        for i, claim in enumerate(claims):
+                            claim_types = claim.get("type", [])
+                            claim_id = claim.get("id", "")
+                            cl = claim_labels_map.get(claim_id, {})
                             FileReviewItem.objects.create(
                                 project_file=pf,
-                                highlighted_text=issue.get("highlighted_text", ""),
-                                problem=issue.get("problem", ""),
-                                suggestion=issue.get("suggestion", ""),
-                                judgment=issue.get("judgment", "FAIL"),
-                                node=issue.get("node", ""),
+                                highlighted_text=claim.get("text", ""),
+                                problem=cl.get("justification", ""),
+                                suggestion="",
+                                judgment=cl.get("label", "Not Enough Evidence"),
+                                node=claim_types[0] if claim_types else "",
                                 order=i,
                             )
                 break
@@ -353,7 +358,7 @@ def review(request):
     ai_status = 'none'
     if selected_file:
         has_items = selected_file.review_items.exists()
-        if has_items:
+        if has_items or selected_file.ai_final_grade:
             ai_status = 'completed'
         elif selected_file.ai_job_id:
             ai_status = 'processing'
