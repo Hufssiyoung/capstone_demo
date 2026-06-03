@@ -37,8 +37,15 @@ jobs:
       - name: Wake
         if: steps.act.outputs.action == 'wake'
         run: |
+          SUB_ID=$(az account show --query id -o tsv)
+
           echo "::group::MySQL start"
           az mysql flexible-server start -n capstone-mysql-b5 -g capstone_design 2>&1 || echo "(already running)"
+          echo "::endgroup::"
+
+          echo "::group::Container Apps start (REST API)"
+          az rest --method post --uri "https://management.azure.com/subscriptions/$SUB_ID/resourceGroups/capstone_design/providers/Microsoft.App/containerApps/capstone-demo/start?api-version=2024-03-01" || echo "(demo already running)"
+          az rest --method post --uri "https://management.azure.com/subscriptions/$SUB_ID/resourceGroups/capstone_design/providers/Microsoft.App/containerApps/capstone-ai/start?api-version=2024-03-01" || echo "(ai already running)"
           echo "::endgroup::"
 
           echo "::group::Container Apps scale up"
@@ -75,9 +82,11 @@ jobs:
       - name: Sleep
         if: steps.act.outputs.action == 'sleep'
         run: |
-          echo "::group::Container Apps scale down"
-          az containerapp update -n capstone-demo -g capstone_design --min-replicas 0 --max-replicas 1 --query "name" -o tsv
-          az containerapp update -n capstone-ai   -g capstone_design --min-replicas 0 --max-replicas 1 --query "name" -o tsv
+          SUB_ID=$(az account show --query id -o tsv)
+
+          echo "::group::Container Apps stop (REST API)"
+          az rest --method post --uri "https://management.azure.com/subscriptions/$SUB_ID/resourceGroups/capstone_design/providers/Microsoft.App/containerApps/capstone-demo/stop?api-version=2024-03-01" || echo "(demo already stopped)"
+          az rest --method post --uri "https://management.azure.com/subscriptions/$SUB_ID/resourceGroups/capstone_design/providers/Microsoft.App/containerApps/capstone-ai/stop?api-version=2024-03-01" || echo "(ai already stopped)"
           echo "::endgroup::"
 
           echo "::group::MySQL stop"
