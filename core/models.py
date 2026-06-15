@@ -138,7 +138,7 @@ class FileReviewItem(models.Model):
     highlighted_text = models.TextField(verbose_name='해당 내용')
     problem = models.TextField(verbose_name='문제점')
     suggestion = models.TextField(verbose_name='제안 내용')
-    judgment = models.CharField(max_length=20, default='FAIL', verbose_name='판정')
+    judgment = models.CharField(max_length=40, default='FAIL', verbose_name='판정')
     node = models.CharField(max_length=50, blank=True, default='', verbose_name='검증 노드')
     order = models.PositiveIntegerField(default=0)
 
