@@ -11,9 +11,6 @@ on:
         options:
           - wake
           - sleep
-  schedule:
-    # 매일 02:00 KST (17:00 UTC) 자동 sleep
-    - cron: '0 17 * * *'
 
 jobs:
   manage:
@@ -27,18 +24,21 @@ jobs:
       - name: Determine action
         id: act
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "action=sleep" >> "$GITHUB_OUTPUT"
-          else
-            echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
-          fi
-          echo "Resolved action: ${{ github.event_name == 'schedule' && 'sleep' || inputs.action }}"
+          echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
+          echo "Resolved action: ${{ inputs.action }}"
 
       - name: Wake
         if: steps.act.outputs.action == 'wake'
         run: |
+          SUB_ID=$(az account show --query id -o tsv)
+
           echo "::group::MySQL start"
           az mysql flexible-server start -n capstone-mysql-b5 -g capstone_design 2>&1 || echo "(already running)"
+          echo "::endgroup::"
+
+          echo "::group::Container Apps start (REST API)"
+          az rest --method post --uri "https://management.azure.com/subscriptions/$SUB_ID/resourceGroups/capstone_design/providers/Microsoft.App/containerApps/capstone-demo/start?api-version=2024-03-01" || echo "(demo already running)"
+          az rest --method post --uri "https://management.azure.com/subscriptions/$SUB_ID/resourceGroups/capstone_design/providers/Microsoft.App/containerApps/capstone-ai/start?api-version=2024-03-01" || echo "(ai already running)"
           echo "::endgroup::"
 
           echo "::group::Container Apps scale up"
@@ -57,7 +57,7 @@ jobs:
           echo "::endgroup::"
 
           {
-            echo "## ✅ 서버 깨어남"
+            echo "## 서버 깨어남"
             echo ""
             echo "| 서비스 | URL |"
             echo "|---|---|"
@@ -69,15 +69,17 @@ jobs:
             echo "- 비번: \`test1234\`"
             echo "- 프로젝트 코드: \`247813\`"
             echo ""
-            echo "> 매일 02:00 KST 자동 sleep. 필요시 다시 wake."
+            echo "> 필요시 다시 sleep 또는 wake."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Sleep
         if: steps.act.outputs.action == 'sleep'
         run: |
-          echo "::group::Container Apps scale down"
-          az containerapp update -n capstone-demo -g capstone_design --min-replicas 0 --max-replicas 1 --query "name" -o tsv
-          az containerapp update -n capstone-ai   -g capstone_design --min-replicas 0 --max-replicas 1 --query "name" -o tsv
+          SUB_ID=$(az account show --query id -o tsv)
+
+          echo "::group::Container Apps stop (REST API)"
+          az rest --method post --uri "https://management.azure.com/subscriptions/$SUB_ID/resourceGroups/capstone_design/providers/Microsoft.App/containerApps/capstone-demo/stop?api-version=2024-03-01" || echo "(demo already stopped)"
+          az rest --method post --uri "https://management.azure.com/subscriptions/$SUB_ID/resourceGroups/capstone_design/providers/Microsoft.App/containerApps/capstone-ai/stop?api-version=2024-03-01" || echo "(ai already stopped)"
           echo "::endgroup::"
 
           echo "::group::MySQL stop"
@@ -85,7 +87,7 @@ jobs:
           echo "::endgroup::"
 
           {
-            echo "## 💤 서버 잠듦"
+            echo "## 서버 잠듦"
             echo ""
             echo "다시 켜려면 위 **Run workflow** 버튼 → \`action=wake\` 선택."
           } >> "$GITHUB_STEP_SUMMARY"

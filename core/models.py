@@ -43,6 +43,7 @@ class ProjectFile(models.Model):
     resubmit_count = models.PositiveIntegerField(default=0, verbose_name='재제출 횟수')
     ai_job_id = models.CharField(max_length=100, blank=True, default='', verbose_name='AI 검증 job ID')
     ai_final_grade = models.CharField(max_length=20, blank=True, default='', verbose_name='AI 종합 판정')
+    ai_summary = models.TextField(blank=True, default='', verbose_name='AI 종합 요약')
     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='uploaded_files')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
@@ -137,6 +138,8 @@ class FileReviewItem(models.Model):
     highlighted_text = models.TextField(verbose_name='해당 내용')
     problem = models.TextField(verbose_name='문제점')
     suggestion = models.TextField(verbose_name='제안 내용')
+    judgment = models.CharField(max_length=40, default='FAIL', verbose_name='판정')
+    node = models.CharField(max_length=50, blank=True, default='', verbose_name='검증 노드')
     order = models.PositiveIntegerField(default=0)
 
     class Meta:

@@ -20,6 +20,15 @@ from .models import FileReviewItem, Project, ProjectFile, ProjectReference, Sche
 
 _AI_BASE = getattr(settings, 'AI_SERVICE_URL', 'http://127.0.0.1:8001')
 
+_NODE_LABELS = {"FACT": "Fact", "NUMERIC": "Numeric", "SOURCE": "Source", "RECENCY": "Recency"}
+
+
+def _node_label(claim_types: list[str]) -> str:
+    """claim type 리스트 → 표시용 노드 라벨 (해당 claim의 모든 타입 표시)."""
+    if not claim_types:
+        return ""
+    return " · ".join(_NODE_LABELS.get(t, t) for t in claim_types)
+
 
 def _normalize_content(text: str) -> str:
     """줄바꿈 정규화: CRLF→LF, 연속 3개 이상 줄바꿈→2개로 축소."""
@@ -28,16 +37,41 @@ def _normalize_content(text: str) -> str:
     return text.strip()
 
 
-def _find_hl(text: str, query: str, min_ratio: float = 0.6) -> str | None:
-    """text 안에서 query 또는 그 최장 prefix를 찾아 반환. 못 찾으면 None."""
+def _find_hl(text: str, query: str) -> str | None:
+    """text 안에서 query와 가장 유사한 span을 반환. 못 찾으면 None.
+
+    1단계: exact match (빠른 경로)
+    2단계: BM25 슬라이딩 윈도우 — 토큰이 부분적으로 다르거나 어미가 달라도 최적 span 탐색.
+    """
+    from rank_bm25 import BM25Okapi
+
     if query in text:
         return query
-    min_len = max(12, int(len(query) * min_ratio))
-    for end in range(len(query) - 1, min_len - 1, -1):
-        prefix = query[:end]
-        if prefix in text:
-            return prefix
-    return None
+
+    query_tokens = re.findall(r'\w+', query)
+    if not query_tokens:
+        return None
+
+    doc_words = list(re.finditer(r'\w+', text))
+    if not doc_words:
+        return None
+
+    window_size = len(query_tokens) + 3
+    windows = [doc_words[i:i + window_size] for i in range(len(doc_words))]
+    windows = [w for w in windows if w]
+    if not windows:
+        return None
+
+    corpus = [[m.group() for m in w] for w in windows]
+    bm25 = BM25Okapi(corpus)
+    scores = bm25.get_scores(query_tokens)
+
+    best_idx = int(scores.argmax())
+    if scores[best_idx] <= 0:
+        return None
+
+    best_window = windows[best_idx]
+    return text[best_window[0].start():best_window[-1].end()]
 
 
 def _ai_verify_background(project_file_id: int, text: str, topic: str) -> None:
@@ -60,22 +94,58 @@ def _ai_verify_background(project_file_id: int, text: str, topic: str) -> None:
                 result_resp = http_client.get(f"{_AI_BASE}/verify/{job_id}/result", timeout=15)
                 if result_resp.status_code == 200:
                     data = result_resp.json()
-                    issues = data.get("final_report", {}).get("issues", [])
-                    final_grade = data.get("final_grade", "")
+                    claims = data.get("claims", [])
+                    claim_labels_map = {
+                        cl["claim_id"]: cl
+                        for cl in data.get("claim_labels", [])
+                    }
                     close_old_connections()
                     pf = ProjectFile.objects.filter(id=project_file_id).first()
                     if pf:
                         pf.review_items.all().delete()
-                        pf.ai_final_grade = final_grade
-                        pf.save(update_fields=['ai_final_grade'])
-                        for i, issue in enumerate(issues):
+                        pf.ai_final_grade = ""
+                        pf.ai_summary = ""
+                        pf.save(update_fields=['ai_final_grade', 'ai_summary'])
+                        for i, claim in enumerate(claims):
+                            claim_types = claim.get("type", [])
+                            claim_id = claim.get("id", "")
+                            cl = claim_labels_map.get(claim_id, {})
                             FileReviewItem.objects.create(
                                 project_file=pf,
-                                highlighted_text=issue.get("highlighted_text", ""),
-                                problem=issue.get("problem", ""),
-                                suggestion=issue.get("suggestion", ""),
+                                highlighted_text=claim.get("text", ""),
+                                problem=cl.get("justification", ""),
+                                suggestion="",
+                                judgment=cl.get("label", "Not Enough Evidence"),
+                                node=_node_label(claim_types),
                                 order=i,
                             )
+                        # 최신성(cherry-picking) 구조신호 추가 표면화.
+                        # 평가 노드(aggregate)와 응답 포맷은 그대로 두고, 응답 results에 이미
+                        # 들어있지만 지금까지 버려지던 recency metadata를 데모 카드로만 노출한다.
+                        claim_text_map = {c.get("id", ""): c.get("text", "") for c in claims}
+                        next_order = len(claims)
+                        for result in data.get("results", []):
+                            if result.get("verifier") != "recency":
+                                continue
+                            meta = result.get("metadata", {}) or {}
+                            direction = meta.get("cherry_pick_direction", "")
+                            if direction in ("", "해당없음"):
+                                continue
+                            indicators = meta.get("time_indicators", []) or []
+                            indicator_text = ", ".join(str(t) for t in indicators) or "과거 시점"
+                            FileReviewItem.objects.create(
+                                project_file=pf,
+                                highlighted_text=claim_text_map.get(result.get("claim_id", ""), ""),
+                                problem=(
+                                    f"과거 시점({indicator_text})의 수치를 현재 상황의 근거로 "
+                                    f"사용하고 있어 최신성 검토가 필요합니다 (선택적 사용 방향: {direction})."
+                                ),
+                                suggestion="최신(2024~2026) 수치를 확인해 표현과 시점을 갱신하세요.",
+                                judgment="Conflicting Evidence/Cherrypicking",
+                                node="Recency",
+                                order=next_order,
+                            )
+                            next_order += 1
                 break
             elif status == "failed":
                 break
@@ -324,7 +394,7 @@ def review(request):
     ai_status = 'none'
     if selected_file:
         has_items = selected_file.review_items.exists()
-        if has_items:
+        if has_items or selected_file.ai_final_grade:
             ai_status = 'completed'
         elif selected_file.ai_job_id:
             ai_status = 'processing'
